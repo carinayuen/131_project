@@ -1,0 +1,814 @@
+---
+title:  "Increasing Diagnostic Accuracy for Breast Cancer"
+author: 
+  - Carina Yuen
+  - UCSB Winter 2024
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  pdf_document:
+    toc: true
+editor_options:
+  markdown:
+    wrap: 72
+---
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+# Introduction and Background Information
+Image processing techniques and a linear-programming-based inductive
+classifier can help with diagnosing breast tumors as malignant or
+benign. I chose a data set from the UCI Machine Learning Repository. The actual research was performed in association with the University of Wisconsin's Department of Surgery and Clinical Sciences. The background paper utilized the aforementioned techniques to get a 97% accuracy rate. Let's see if we can do even better!
+
+```{r, echo = FALSE, warnings = FALSE, include = FALSE}
+library(here)
+here("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (464).png")
+```
+
+```{r, echo = FALSE, out.width="50%", fig.align = "center"}
+knitr::include_graphics("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (464).png")
+```
+
+
+The interface is interactive, so the user needs to initialize
+snakes (active contour models) around the perimeter of a set of cell
+nuclei. The user-initialized snakes are deformed to fit the nuclei
+exactly, allowing for precise and automated analysis of nuclear
+properties (size, shape, texture). This is advantageous because
+previously, to examine tumors, we had to perform an invasive surgical
+procedure. Here, we use fine needle aspirations from fluid samples, and
+take a digital image of that for the user to locate the cell nucleus
+boundary. Essentially, we are taking fluid from a suspicious mass for
+further investigation. For some background, snakes are deformable
+splines which seek to"minimize an energy function defined over the arc
+length of a closed curve" (Street 1). Though this method has its
+benefits, it also has drawbacks, such as being subjective in deciding
+malignancy do to the interactive user element. In our investigation, however, 
+we will still assume the same experimental set up with the user determined 
+element.
+
+Energy Function: weighted sum of energy terms, where
+$\alpha, \beta, \gamma$ are empirically derived constants. The optimal
+local value of energy function is approximated using a greedy algorithm
+to control computational time.
+
+$E_{cont}$ penalizes discontinuities in the curve.
+
+$E_{image}$ measures gray level discontinuity along the snake.
+
+$$E = \int_s(\alpha E_{cont}(s)+\beta E_{curve}+\gamma E_{image}(s))ds $$
+
+```{r, echo = FALSE, warnings = FALSE, include = FALSE}
+library(here)
+here("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (457).png")
+```
+
+```{r, echo = FALSE, out.width="50%", fig.align = "center", warnings = FALSE}
+knitr::include_graphics("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (457).png")
+```
+
+## How is Breast Cancer Usually Detected?
+I chose this area of research because about 2.1 million women suffer
+from breast cancer every year. In addition, breast cancer accounts
+for a large proportion of all mortality from cancers (~15%). The most common methods for detecting breast
+cancer are imaging: specifically, mammograms (x-ray picture of breast) and histopathological images.
+
+The need for a more efficient and accurate way to detect breast cancer
+has been around, as a study from the 1994 explains that "From their
+study, 90% of radiologist recognized fewer than 3% of cancers" by simply
+manually analyzing and interpreting. In the introductory research paper, we saw 
+that the the researchers Street, Wolberg, and Mangasarian used ten-fold cross validation to achieve the best accuracy of 97%, using a separating plane on only 3 of the 30 features: mean texture, worst area and worst smoothness. This gives a lot of insight into
+which predictors are influential, as such a high predictive accuracy can be achieved with such few predictors. Here, we see a hint that worst texture, area, and smoothness are key to identifying irregularities.
+
+## What is a Deformable Spline?
+In the introductory research papers, investigators used deformable splines. They 
+are active contour models called snakes. The purpose of these models is to solve 
+problems where we already know the
+approximate shape of the boundary. The user manually traces the approximate boundary to initiate the automated aspect of the process. Snakes adapt to differences and noise
+in stereo matching and motion tracking. Stereo matching, or disparity
+estimation, is where we find "pixels in multiscopic [from multiple
+perspectives or view points] views that correspond to the same 3D point in the scene." Snakes are often used for shape recognition and edge detection, both of which are extremely important when examining our images. Below is a visual to help see how we merge multiple viewpoints
+(left and right view) to create an image.
+
+
+```{r, echo = FALSE, warnings = FALSE, include = FALSE, warnings = FALSE}
+library(here)
+here("C:/Users/Carina W Yuen/Downloads/stereo_visual.png")
+```
+
+```{r, out.width="50%", fig.align = "center", warnings = FALSE}
+knitr::include_graphics("C:/Users/Carina W Yuen/Downloads/stereo_visual.png")
+```
+
+I wanted to explore how snakes are different than classical feature
+techniques, specifically in the context of Breast Cancer diagnosis.
+
+## Data Source
+The data source here is the UCI machine learning repository. Titled
+"Diagnostic Wisconsin Breast Cancer Database." There is no missing data.
+
+Link to data: https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic
+
+Wolberg,William, Mangasarian,Olvi, Street,Nick, and Street,W.. (1995). Breast Cancer Wisconsin (Diagnostic). UCI Machine Learning Repository. https://doi.org/10.24432/C5DW2B.
+
+# Codebook & EDA
+Our data is 569 rows and 32 columns. Of the 32 columns, one of them is the actual diagnosis and the other is id, showing that we actually
+have 30 predictors in total.
+
+Radius: Found through averaging the length of radial line segments defined by the centroid of the snake and each singular point of the
+snake, generally a good measure of tumor size
+
+Perimeter: Total distance between snake points, another predictor relating to size
+
+Area: Number of pixels on the interior of the snake plus one-half of the pixels in the perimeter, increased area might indicate cell proliferation, implying a cancerous tumor
+
+Compactness: Measures the compactness of the cell nuclei (dense cell packing) using $perimeter^2/area-1$. Dense cell packing can lead to greater intercellular communication, potentially encouraging the tumor to grow.
+
+Smoothness: Measures the difference between the length of the radial line and the mean length of the lines surrounding it (local variation in radius length)
+
+```{r,  include = FALSE, warnings = FALSE}
+library(here)
+here("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot
+                        (455).png")
+```
+
+```{r, out.width="50%", warnings = FALSE}
+knitr::include_graphics("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (455).png")
+
+```
+
+Concave Points: Measures the number and severity of concavities/indentations in nucleus boundary
+
+```{r, include = FALSE, warnings = FALSE}
+here("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (459).png)")
+
+```
+
+```{r, out.width="50%", warnings = FALSE}
+knitr::include_graphics("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (459).png")
+
+```
+
+Symmetry: measures symmetry of nucleus shape, look for irregular symmetry 
+
+```{r, include = FALSE, warnings = FALSE}
+here("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (461).png)")
+
+```
+
+```{r,  out.width="50%", warnings = FALSE}
+knitr::include_graphics("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (461).png")
+
+```
+
+Fractal Dimension: Perimeter of nucleus measured using coastline approximation by Mandelbrot, helps to characterize complexity and irregularity
+
+```{r, include = FALSE, warnings = FALSE}
+here("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (463).png)")
+
+```
+
+```{r, out.width="50%", warnings = FALSE}
+knitr::include_graphics("C:/Users/Carina W Yuen/Pictures/Screenshots/Screenshot (463).png")
+
+```
+
+Texture: Measures variances of the gray scale intensities in component pixels, changes in texture are suspicious
+
+The reason there are 30 predictor columns is because the data consists of mean, se, worst...etc different aspects of the same predictor.
+
+## Histograms For Variables of Interest
+
+After doing some initial exploratory data analysis, it seems that for
+multiple predictors, the worst case values are all centered more to the right than the mean values. This makes sense as intuitively, as
+increased tumor size and irregular texture is generally more cause for concern. The suggested background paper confirms this as, "with all the shape features, a higher value corresponds to a less regular contour and thus to a higher probability of malignancy" (Street 5).
+
+```{r, echo = FALSE, out.width="80%", include = FALSE, warnings = FALSE}
+library(tidyverse)
+library(tidymodels)
+library(readxl)
+library(corrr)
+library(corrplot)
+library(reshape2)
+library(recipes)
+library(kknn)
+library(ggcorrplot)
+library(FactoMineR)
+
+here("C:/Users/Carina W Yuen/Downloads/UCI_breast_cancer_data/uci_breast_cancer_data.xlsx")
+
+cancer_data <- read_excel("C:/Users/Carina W Yuen/Downloads/uci_breast_cancer_data.xlsx")
+
+cancer_data$diagnosis = as.factor(cancer_data$diagnosis)
+```
+
+Checking for Missing Data Upon inspecting the data set, all the columns have a count of 0 occurrences of NA values, meaning that we do not have any missing data.
+
+```{r, warnings = FALSE}
+colSums(is.na(cancer_data))
+```
+
+```{r, warnings = FALSE}
+library(tidymodels)
+set.seed(123)
+
+# split into training and testing, with only the means
+cancer_data_split <- initial_split(cancer_data, prop=0.80, strata=diagnosis)
+
+cancer_data_train <- training(cancer_data_split)
+cancer_data_test <- testing(cancer_data_split)
+head(cancer_data_train)
+```
+
+```{r, fig.width=5, fig.width=5, include = TRUE, warnings = FALSE}
+# excluding ID and Diagnosis
+library(corrplot)
+only_predictors <- cancer_data_train %>% select(-c("diagnosis"))
+head(only_predictors)
+only_mean <- cancer_data_train %>% select(c("radius_mean", "texture_mean", 
+                                      "perimeter_mean", "area_mean", 
+                                      "smoothness_mean", "compactness_mean", 
+                                      "concavity_mean", "concave points_mean", 
+                                    "symmetry_mean", "fractal_dimension_mean", "diagnosis"))
+
+only_worst <- cancer_data_train %>% select(c("radius_worst", "texture_worst", 
+                                       "perimeter_worst", "area_worst", 
+                                       "smoothness_worst", "compactness_worst", 
+                                       "concavity_worst", "concave points_worst"
+                                  , "symmetry_worst", "fractal_dimension_worst"))
+
+
+# split into categorical and numerical values
+
+mean_radius_plot <- ggplot(only_predictors,aes(x=radius_mean)) + 
+  geom_histogram()+  scale_y_continuous(breaks = seq(0, 80, by = 10), 
+limits=c(0,80))+  scale_x_continuous(breaks=seq(0,40, by  = 2), limits=c(0,30))+
+labs(title='Mean Radius of Breast Cancer Tumors', x = 'Mean Tumor Radius',  y= 'Count', ylim(0,80), xlim(0,40))
+mean_radius_plot
+```
+
+Mean Tumor Radius Plot: Here we see that the mean tumor radius is centered around values of 11-16 units of distance from the center to the points on the perimeter. There is a slight right skew to the data.
+
+```{r, fig.width=5, fig.width=5, include = TRUE, warnings = FALSE}
+worst_radius_plot <- ggplot(only_predictors,aes(x=radius_worst)) + 
+  geom_histogram()+ scale_x_continuous(breaks=seq(0,40, by  = 2), limits=c(0,30))+ 
+  scale_y_continuous(breaks = seq(0, 80, by = 10))+
+  labs(title='Worst Radius of Breast Cancer Tumors', x = 'Worst Tumor Radius', y= 'Count', ylim(0,80))
+
+
+```
+
+Worst Radius Plot: The worst radius values are also right skewed, this is consistent with what we saw for the mean radius values. The difference is we do see some small peaks between 19-21 and 23-24 that are not present in the previous histogram.
+
+```{r, fig.width=5, fig.width=5, include = TRUE, warnings = FALSE}
+worst_texture_plot <- ggplot(only_predictors, aes(x=texture_worst)) + geom_histogram()  + geom_histogram()+ scale_x_continuous(breaks=seq(0,50, by  = 3), limits=c(0,50))+ 
+  scale_y_continuous(breaks = seq(0, 80, by = 10), limits=c(0,80))+
+  labs(title='Worst Texture of Breast Cancer Tumors', x = 'Worst Tumor Texture', y= 'Count', ylim(0,80))
+
+worst_texture_plot
+```
+
+Worst Tumor Texture Plot: Here we see that the texture, or the standard deviation of the gray-scale values, are also right skewed. This is an interesting property as it seems that radius (size) and texture have some sort of positive relationship. This can be an avenue for further research!
+
+
+```{r, fig.width=5, fig.width=5, include = TRUE, warnings = FALSE}
+worst_compactness_plot  <- ggplot(only_predictors, aes(x=compactness_worst)) + geom_histogram() + scale_x_continuous(breaks=seq(0,3, by  =0.1))+ scale_y_continuous(breaks = seq(0, 80, by = 10), limits=c(0,80))+labs(title="Worst Compactness of Breast Cancer Tumors", x = "Worst Tumor Compactness", y= "Count", ylim(0,80))
+worst_compactness_plot
+```
+
+Worst Compactness Plot: The right skew pattern continues! Here we see that the worst tumor compactness is centered around 0.10-0.25. For some background about how these values are derived, the compactness is computed by perimeter^2 / area - 1.0.
+
+```{r, fig.width=5, fig.height=5, include = TRUE, warnings = FALSE}
+only_mean_wo_diag <- only_mean[1:10]
+
+cor_matrix_mean <- cor(only_mean_wo_diag)
+
+cor_matrix_worst <- cor(only_worst)
+
+corrplot(cor_matrix_mean, tl.cex = 0.7, type = 'lower', title = "Correlation Matrix for Mean Values", mar=c(0,0,2,0))
+```
+
+```{r, fig.width=5, fig.height=5, include = TRUE, warnings = FALSE}
+corrplot(cor_matrix_worst, tl.cex = 0.7, type = 'lower', title = "Correlation Matrix for Worst Values", mar=c(0,0,2,0))
+```
+
+Splitting the mean data and the worst data allows for more interpretable visualization through the correlation matrix. As expected, the corresponding "matching" predictors (ex: radius_mean vs radius_worst, texture_mean vs texture_worst...etc) all have similar correlation values
+with the other predictors. A similar strength of relation (represented by shade of circle) is also noted as we compare the corrplot(cor_matrix_mean) and corrplot(cor_matrix_worst).
+
+
+## Interesting Pattern in Correation Between Predictors and Chances of Malignancy
+An unexpected outcome is that in the mean correlation plot, the mean
+fractal dimension, mean radius, mean perimeter, and mean area all have a somewhat
+negatively correlated relationship (roughly -0.4 to -0.5). In the
+correlation plot with the worst measurements, however, the relationship
+between the two variables is approximately 0. A point of investigation
+would be to explore the data and come up with a theoretical explanation
+for why this is the case. It could be that a somewhat negatively correlated relationship between the above values is a good indication that the tumor is most likely not malignant.
+
+After examining the covariance plot, some interesting relationships
+appear between mean concave points and mean radius, and mean compactness
+and mean concavity. Visually, this is denoted by the darker blue circles
+which represent the covariance value for each pair of predictors. The positive correlation can be explained by how all the predictors are generally describing size in some manner. The
+other pairs with strong covariance intuitively make sense, so I choose
+to explore just the selected pairs.
+
+### Key Insight: Tumor Irregularity and Size
+
+In biology, physical form and structure is often closely related to function. It seems that as the number of indentations in the tumor increase, so does the size. This indicates that larger tumors tend to be more irregular in shape.
+
+## PCA for dimension reduction
+
+The presence of correlated predictors may affect our predictive accuracy. I decided to use PCA to preprocess the data before analyzing it. This way, our analysis more simple to interpret and visualize in the future.
+
+### Examining the Contribution of Each Variable
+
+```{r, fig.width = 8, fig.height=8, include = TRUE, warnings = FALSE}
+library(factoextra)
+library(ggcorrplot)
+# normalize data that is numeric
+numeric_data <- only_mean %>% select(where(is.numeric))
+
+cancer_data_normalized <- cancer_data_train %>%
+  mutate(across(where(is.numeric), scale))
+
+cancer_data_normalized_num <- cancer_data_train %>% select(where(is.numeric))
+
+# create covariance matrix
+corr_matrix <- cor(cancer_data_normalized_num)
+ggcorrplot(corr_matrix)
+
+cancer_data_train.pca <- princomp(corr_matrix)
+
+summary(cancer_data_train.pca)
+#biplot(cancer_data_train.pca, rep)
+
+cancer_data_train.pca$loadings[, 1:2]
+```
+
+
+```{r, fig.width=7, fig.height=7, include = TRUE, warnings = FALSE}
+#cancer_data.pca$loadings[, 1:10]
+library(factoextra)
+# scree plot
+fviz_eig(cancer_data_train.pca, addlabels = TRUE)
+
+fviz_pca_var(cancer_data_train.pca, addlabels = TRUE, repel = TRUE)
+```
+
+From the PCA analysis, we can see that ~99.5% of the variance within
+the cancer data can be explained by the first 10 principle components.
+This helps simplify analysis from 30 principle components to the 5 most
+influential predictors.This will help with the interpretability of our model. The 
+first ten components here would be radius_mean, radius_worst, area_mean, perimeter_mean,
+area_worst, perimeter_worst, fractal_dimension_mean, concave_points_worst, 
+fractal_dimension_worst, and concavity_worst. Isolating the unique predictors:
+we see the ten components can be summarized to characteristics related to radius,
+area, perimeter, fractal dimension and concavity. 
+
+
+Analyzing the bi plot of the attributes, predictors that are grouped
+together are positively correlated. In the upper right corner,
+we can see that mean area, mean radius, mean perimeter, and their
+respective worst values, are in one cluster. Theoretically, it makes
+sense that these predictors are positively correlated, as they are
+measuring the same criteria, but different aspects of it, so trends on
+one criteria generally can apply to trends on the other.
+
+The second group of predictors is near the bottom of the plot. We see
+mean symmetry, mean smoothness, standard error of concavity, standard
+error of compactness, worst symmetry, and worst smoothness are clustered together. This provides some useful insight, as intuitive thinking might not let us know that symmetry, smoothness, concavity and compactness are
+so important.
+
+Examining the scree plot, it is much easier to look at and interpret. We see that 99.6 % of the data's variance can be explained by the first 10 principal components. This is great, as we started off with 32 columns, 30 of which were predictors! This is a significant reduction in dimension!
+
+# Model Building
+
+## Model 1: Pruned Decision Tree
+The first model I chose was the Pruned Decision Tree. I chose this model because the pruning process has the potential to help with overfitting. In addition, it simplifies the decision tree for better interpretability. Decision trees in general are advantageous because we are doing automatic feature selection. It also works great for larger data sets. In this case, I have about 560 observations, so computational cost is not a huge consideration. However, if my data set was larger, this would also still work well.
+
+```{r, fig.width = 5, fig.height=5, include = TRUE, warnings = FALSE}
+library(rpart.plot)
+cancer_folds <- vfold_cv(cancer_data_train, v = 10)
+
+tree_spec <- decision_tree(cost_complexity=tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+c_recipe <- recipe(diagnosis~., data=cancer_data_train)%>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors()) %>%
+  step_pca()
+
+c_recipe  %>% prep() %>% bake(new_data=cancer_data_train)
+
+tree_wf <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(c_recipe)
+
+param_grid <- grid_regular(cost_complexity(range=c(-3, -1)), levels=10)
+
+tune_tree <- tune_grid(
+  tree_wf,
+  resamples = cancer_folds, 
+  grid = param_grid
+)
+  
+autoplot(tune_tree)
+
+# to choose the best model
+best_complexity <- select_best(tune_tree)
+tree_final <- finalize_workflow(tree_wf, best_complexity)
+tree_fin_fit <- fit(tree_final, data=cancer_data_train)
+
+tree_fin_fit %>%
+  extract_fit_engine() %>%
+  rpart.plot()
+
+best_complexity
+```
+
+The best cost complexity value was 0.001. Cost Complexity parameters represent the trade-off between tree complexity and quality of fit. This value hints there is a small penalty for complexity when tuning. This suggests that there is value in increasing the complexity of our model, up to a certain point.
+
+### Pruned Decision Tree Performance
+Best accuracy: ~93.6%
+Best roc_auc value: 0.95
+
+Looking at our decision tree, we see that each node shows an M for
+Malignant or B for Benign. We see that the first predictor that the data
+is split on is the radius_worst, followed by concave_points_worse, texture_mean, and concave_points_worst. This indicates that the most
+important predictors for tumor diagnosis are counts of concave points and irregularity in texture. 
+
+61% of the tumors ended up being classified as Benign, and 39% as Malignant. The best Pruned Decision Tree had a cost_complexity parameter of ~0.0215. 
+
+Unfortunately, this model did not do as good as I expected. Upon further reading about the Pruned Decision Tree model, I believe this might be because of under fitting. Since the process involves the removal of branches, we do lose some information from the data as a result.
+
+## Model 2: KNN
+The third model I decided to try was K nearest neighbors. I chose this model because I like the interpretability and simplicity of it. It is also another non-parametric model, allowing for some flexibility while not assuming the data follows a specific underlying distribution. 
+For the number of neighbors, I used tune().
+
+```{r, include = TRUE, warnings = FALSE}
+library(parsnip)
+knn_mod_cv <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kknn")
+
+# with cross validation
+knn_wkflow_cv <- workflow() %>%
+  add_model(knn_mod_cv) %>%
+  add_recipe(c_recipe)
+
+# create k fold data set
+cancer_folds <- vfold_cv(cancer_data_train, v = 10)
+
+# create and tune grid
+neighbors_grid <- grid_regular(neighbors(range = c(1,10)), levels = 10)
+
+tune_res <- tune_grid(object = knn_wkflow_cv, resamples = cancer_folds, grid = neighbors_grid, control = control_grid((verbose=TRUE)))
+autoplot(tune_res)
+
+collect_metrics(tune_res)
+```
+
+### KNN Performance
+Best accuracy: 96.5%
+Best roc_auc: ~0.989
+
+Analyzing the KNN model performance, we see that as the number of
+nearest neighbors increases, our accuracy generally does as well. This makes sense because with more observations, we generally decrease bias and variance. This is because we are utilizing more data and information.  There is a significant jump in the plot between 5 and 6 neighbors. This suggests that if we were choosing between these two values, it is advantageous to go with 6. The accuracy increases from from roughly 94.75% to slightly above 96%. The roc_auc plot shows that there is an increase in our area under the curve
+between 1 to 3 nearest neighbors. It is interesting to see how these two
+metrics differ in suggesting an optimal number of nearest neighbors.
+
+Choosing an Optimal Number of Nearest Neighbors: On one extreme, 6
+neighbors (the lower bound considered) gives a mean accuracy value of
+~0.93 and a mean roc_auc value of ~0.97. For 10 neighbors, we see a
+similar mean accuracy level, but for roc_auc value, we see an increase
+to ~0.98. This suggests that there is not much downside to going with
+10 neighbors, as accuracy virtually stays the same and roc_auc increases
+a bit. The higher the roc_auc value, the better the model is at discriminating between malignant and benign.
+
+## Model 3: Gradient Boosted Tree
+The fourth model I chose was a gradient boosted tree. I picked this as a later model because I believe it will perform well, if not the best. This is because gradient boosted trees generally have high predictive accuracy. Moreover, since it is an ensemble learning method, we reduce the chances of overfitting.
+
+```{r, eval=FALSE, warnings = FALSE}
+library(xgboost)
+library(vip)
+bt_class_spec <- boost_tree(mtry = tune(), trees = tune(), learn_rate = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+bt_class_wf <- workflow() %>%
+  add_model(bt_class_spec) %>%
+  add_recipe(c_recipe)
+bt_grid <- grid_regular(mtry(range = c(1, 6)), 
+                        trees(range = c(200, 600)),
+                        learn_rate(range = c(-10, -1)),
+                        levels = 5)
+tune_bt_class <- tune_grid(bt_class_wf, resamples = cancer_folds, grid =bt_grid )
+
+save(tune_bt_class, file = "tune_bt_class.rda")
+```
+
+Here, we tune the mtry, trees, and learning rate parameter. mtry represents the # of variables randomly sampled as candidates at each split of the tree. I choose the above ranges for mtry, as we have 30 predictors (excluding ID and Diagnosis) and want to narrow it down. The range for the trees is reasonable given the data set size of about 600.
+
+Delving into the purpose of the learning rate, we know that a smaller learning rate can help with the risk of overfitting, resulting in a simple model (low variance, high bias). A learning rate of -10 would lead to larger updates of the model at each step, while on the other extreme, a learning rate of -1 would make smaller adjustments at a time.
+
+```{r, include = TRUE, warnings = FALSE}
+library(vip)
+bt_class_spec <- boost_tree(mtry = tune(), trees = tune(), learn_rate = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+bt_class_wf <- workflow() %>%
+  add_model(bt_class_spec) %>%
+  add_recipe(c_recipe)
+
+load(file = "tune_bt_class.rda")
+best_bt_class<- select_best(tune_bt_class, n=1)
+
+best_bt_class
+
+final_bt_model <- finalize_workflow(bt_class_wf, best_bt_class)
+final_bt_model <- fit(final_bt_model, cancer_data_train)
+
+final_bt_model %>% extract_fit_parsnip() %>%
+  vip() + 
+  theme_minimal()
+```
+
+## Gradient Boosted Tree Performance
+Best accuracy: ~94%
+Best roc_auc: ~0.96
+
+Examining the autoplot, we see that the accuracy for this model improved slightly from before, from 93% to about 94%! In addition the roc_auc remained about the same at 0.96.
+
+```{r, fig.width=7, fig.width=7, include = TRUE, warnings = FALSE}
+autoplot(tune_bt_class) + theme(text = element_text(size=12)) + scale_y_continuous(breaks = seq(0.68, 1, by = 0.02))
+```
+
+
+## Model 4: Random Forest Model
+The fifth model I decided to try was the random forest model. Random forest models are known for high accuracy and being able to reduce overfitting because of the property that multiple decision trees are averaged. For the mtry, trees, min_n parameters I used the same values as before. For the levels, I chose 5 because it is a moderate value that allows for exploration of the hyper parameter space, but is not too computationally expensive.
+
+```{r, warnings = FALSE}
+rf_class_spec <- rand_forest(mtry = tune(), 
+                             trees = tune(),
+                             min_n = tune()) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+rf_class_wf <- workflow() %>%
+  add_model(rf_class_spec) %>%
+  add_recipe(c_recipe)
+
+rf_grid <- grid_regular(mtry(range = c(1, 6)), 
+                        trees(range = c(200, 600)),
+                        min_n(range = c(10, 20)),
+                        levels = 5)
+```
+
+```{r, eval = FALSE, warnings = FALSE}
+tune_class_rf <- tune_grid(
+  rf_class_wf,
+  resamples = cancer_folds,
+  grid = rf_grid
+)
+
+save(tune_class_rf, file = "tune_class_rf.rda")
+```
+
+```{r, include = TRUE, warnings = FALSE}
+load(file = "tune_class_rf.rda")
+autoplot(tune_class_rf) + theme_minimal() 
+
+best_rf <- select_best(tune_class_rf)
+show_best(tune_class_rf, n=1)
+
+```
+
+## Random Forest Model Performance
+Best accuracy: 96.75%
+Best roc_auc: 0.992
+This model and logistic regression are at a near tie in terms of both accuracy and roc_auc. Using this method we were able to increase the predictive accuracy relative to the other models in general, though. Examining the output of select_best, we see that the best model based on roc_auc was with 500 trees, with a mtry parameter of 4, min_n 10 and n=10. Looking at the autoplot, accuracy seems to peak at trees = 400, The standard error was only ~0.00636, which is great! We see that the roc_auc generally decreases as the number of randomly selected predictors increases. This is a pattern we see across all different number of trees. This may be due to overfitting, as some models experience an initial peak showing that predictive accuracy was approving up until a certain point. In addition, as the number of randomly selected predictors increase, we see our roc_auc go down as well.
+
+## Model 5: Logistic Regression
+I decided to use Logistic Regression, as it is suitable for predicting classification outcomes in supervised machine
+learning. It also performs particularly well with binary classification tasks, such as predicting if a tumor is malignant or not. A potential downside of the model is its reliance on the assumption of linearity.
+
+```{r, warnings = FALSE}
+c_recipe <- recipe(diagnosis~., data=cancer_data_train)%>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors()) %>%
+  step_pca(num_comp = 2)
+
+c_recipe  %>% prep() %>% bake(new_data=cancer_data_train)
+
+```
+
+Logistic Regression Model
+
+```{r, warnings = FALSE}
+library(pROC)
+log_model <- logistic_reg(mixture = double(1), penalty = double(1)) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification") %>%
+  fit(diagnosis ~ ., data = cancer_data_train)
+
+head(tidy(log_model))
+
+```
+The best penalty value is found to be 1e-10, and the best mixture value is 0.5!
+
+Class Predictions
+
+```{r, warnings = FALSE}
+pred_diag <- predict(log_model, new_data=cancer_data_test, type = 'class')
+pred_diag
+
+res <- cancer_data_test %>%
+  select(diagnosis) %>%
+  bind_cols(pred_diag)
+
+accuracy(res, truth=diagnosis, estimate = .pred_class)
+
+```
+
+```{r, include = TRUE, warnings = FALSE}
+log_reg_results <- augment(log_model, new_data = cancer_data_train)
+log_reg_results %>%
+  conf_mat(truth=diagnosis, estimate=.pred_class) %>%
+  autoplot(type = 'heatmap')
+ 
+```
+
+### Logistic Regression Performance
+Best accuracy: ~98.3
+Best roc_auc: 0.9935
+
+The model's accuracy of approximately 98.3% is great! However, with
+something as crucial and life-threatening as determining if a tumor is
+malignant or benign, sensitivity is definitely preferred over
+specificity. This is because treatment and additional tests for someone
+with a false positive is not nearly as harmful as missing a crucial
+diagnosis if the tumor was, in fact, malignant.
+
+Tuning Hyper parameters After tuning the hyper parameter, the best
+penalty term was found to be 1e-10 and the best mixture value is 0.
+
+Analyzing the confusion matrix, we see on the diagonal entries that
+there were 283 true positives of benign tumors predicted, and 161 true
+positives of malignant tumors predicted. The model did great! There was only ten incorrect predictions out of 454 total. 8 of  of the incorrect cases were where a tumor was predicted as benign when in reality, it was not. This highlights that this specific model might not be sensitive enough. The other 2 wrong classifications were false malignant diagnoses.
+
+High sensitivity is extremely important in the cases of medical screening and diagnosis because the risks and harms of a false positive are much lower than that of a false negative. In the case of a false
+positive, additional screening and tests would be taken to ensure the
+accuracy of the diagnosis. On the other hand, in the case of a false
+negative, someone with a cancerous tumor would continue on without
+treatment, a much more severe and negative consequence. 
+
+# Applying Best Model on Testing Set
+The best model was actually logistic regression! I am quite surprised because trees seem a bit more complex, but it is clear
+that increasing complexity does not necessarily increase predictive accuracy.
+
+Here, we apply the best model to our testing set to see how it does on "new" or "unseen" data!
+
+```{r, include = TRUE, warnings = FALSE}
+cancer_data_folds <- vfold_cv(cancer_data_test, v = 10)
+
+log_reg_results_test <- augment(log_model, new_data = cancer_data_test)
+log_reg_results_test %>%
+  conf_mat(truth=diagnosis, estimate=.pred_class) %>%
+  autoplot(type = 'heatmap')
+
+```
+
+Examining our confusion matrix created using the testing data. We can see that there were 72 true benign diagnoses, and 41 correct malignant diagnoses. There were two incorrect predictions, again were both cases were actually malignant but the test predicts benign. Going back to the idea of sensitivity. This issue shows up here again, as we initially saw this in the confusion matrix created using the training data. This suggests that this is not by chance, and that we should modify our model to try to improve it further (see conclusion with SVMs).
+
+# Testing Our Model on a Specific Case
+Let's see how well our best model (so far!) works on a specific group of patients! I tried to find a subgroup of patients who's concave_points_worst is high, as we noticed a pattern of high concavity count in malignant tumors. This is a good sanity check of the model, as we see in the confusion matrix there were 38 true malignant diagnoses, one true benign diagnosis and one false benign diagnosis. This is consistent with our previous issues with sensitivity in the confusion matrix for the entire testing set. 
+
+Despite the two incorrect classifications, this is overall reassuring. This is because even though the observation with the benign tumor had high concave_points_mean (top 40 largest values in our entire testing set), it still accurately predicted one of the benign's correctly instead of lumping it with the malignant observations! However, there still was one false benign diagnosis where the tumor was actually malignant we need to adjust!
+
+```{r, include = TRUE, warnings = FALSE}
+library(dplyr)
+selected_patient <- cancer_data_test %>%
+  slice_max(`concave points_mean`, n=40)
+
+log_reg_results_sel <- augment(log_model, new_data = selected_patient)
+log_reg_results_sel %>%
+  conf_mat(truth=diagnosis, estimate=.pred_class) %>%
+  autoplot(type = 'heatmap')
+
+```
+
+Now on the opposite extreme, I decided to evaluate the model performance on patients with lower concave_points_worst to further explore our issue with sensitivity.
+
+```{r, include = TRUE, warnings = FALSE}
+library(dplyr)
+selected_patient_min <- cancer_data_test %>%
+  slice_min(`concave points_mean`, n=40)
+
+log_reg_results_min <- augment(log_model, new_data = selected_patient_min)
+
+log_reg_results_min %>%
+  conf_mat(truth=diagnosis, estimate=.pred_class) %>%
+  autoplot(type = 'heatmap')
+```
+
+Here, we see that our model correctly predicted 40 benign tumors on our selected group of patients! Great! This suggests that our model does a great job at correctly predicting benign diagnoses, but does not do as well with catching truly malignant tumors. At first, I thought this might be because of a class imbalance, leading the model to have less malignant tumors to "learn" from, but here we double check that it is not the case.
+
+```{r, include = TRUE, warnings = FALSE}
+barplot(prop.table(table(cancer_data_train$diagnosis)),
+        col = rainbow(2),
+        ylim = c(0, 0.7),
+        main = "Class Distribution")
+```
+
+Here, we can visually see that there is no major class imbalance, as ~60% of the data was benign and ~40% malignant. Thus, I concluded that the issue was not this, and I decided to try another model in hopes it would perform better in terms of sensitivity.
+
+# Potential Solution: SVMs
+I looked into some additional resources to read more about the current state of this research. I found a really awesome paper on feature extraction and classification. Specifically, it is called "Analysis of Feature Extraction and Classification Methods on Histopathological Images for Diagnosing Invasive Ductal Carcinoma" which was presented within the 2022 International Conference on Information Technology, Computer and Electrical Engineering. This project has some similarities with my chosen data set, as their methodology also utilized histopathology images as well (tissue images). They used some more complex feature extraction techniques and then classified the results using the Support Vector Machine. They had great results with SVM, so I tried that model on our data set to see if we could do even better!
+
+```{r, warnings = FALSE}
+library(e1071)
+c_recipe <- recipe(diagnosis~., data=cancer_data_test)%>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors()) %>%
+  step_pca()
+
+c_recipe  %>% prep() %>% bake(new_data=cancer_data_test)
+
+svm_fit <- svm(diagnosis~.,
+                  data = cancer_data_test, kernal = "polynomial")
+svm_predictions <- predict(svm_fit, cancer_data_test)
+```
+
+
+```{r, include = TRUE, warnings = FALSE}
+library(pROC)
+cancer_data_test$diagnosis = as.factor(cancer_data_test$diagnosis)
+library(caret)
+predictions <- predict(svm_fit, cancer_data_test)
+confusionMatrix(predictions, cancer_data_test$diagnosis)
+
+```
+Looking at the No Information Rate value, it 0.6261, indicating that if we just always guessed the majority class benign, we would be accurate 62.61% of the time.
+
+SVMs are hard to visualize past 2 dimensions, so I decided to plot the decision boundary to explore our earlier research question.
+
+Here we will explore the previous idea we touched on: Interesting Pattern in Correation Between Predictors and Chances of Malignancy. Referencing back to our unexpected outcome that in the mean correlation plot, the mean
+fractal dimension, mean radius, mean perimeter, and mean area all have a somewhat negatively correlated relationship (roughly -0.4 to -0.5). However, in the correlation plot with the worst measurements, however, the relationship between the two variables is approximately 0. 
+
+It could be that a somewhat negatively correlated relationship between the above values is a good indication that the tumor is most likely not malignant. Let's investigate this relationship with our best model! In the SVM plot, I used the mean fractal dimension and mean concave points as my two selected variables to see how these predictors affect diagnoses! 
+
+```{r, warnings = FALSE}
+library(kernlab)
+cancer_data_test
+x1 <- cancer_data_test$fractal_dimension_mean
+x2 <- cancer_data_test$'concave points_mean'
+
+diagnosis<- as.factor(cancer_data_test$diagnosis)
+data <- data.frame(x1 = x1, x2 = x2)
+cancer_data_test
+svm_fit <- ksvm(diagnosis~., data= data)
+plot(svm_fit, data = cancer_data_test)
+
+```
+
+Here we see that SVM does a great job, as there is a clear red and blue boundary. The SVM is unique in it's ability as it is the only linear model that can classify data which isn't linearly separable. Here we see the red and blue groups are definitely not separated by a straight line, but SVM still did a great job. It seems that after values of 0.05 for concave points mean, it is very likely that the tumor is malignant.
+
+The color gradient also shows how confidently a new point would be classified. There are a few points that fall right at the edge of the SVM boundary, so further research might involve insuring those points are reliably and accurately classified!
+
+Besides fractal dimension and mean concave points, I also wanted to visualize the SVM plot of fractal dimension and mean area, as area was the most important predictor in our decision tree earlier.
+
+```{r, warnings = FALSE}
+x3 <- cancer_data_test$fractal_dimension_mean
+x4 <- cancer_data_test$'concave points_mean'
+
+diagnosis<- as.factor(cancer_data_test$diagnosis)
+data_2 <- data.frame(x3 = x3, x4 = x4)
+svm_fit <- ksvm(diagnosis~., data= data_2)
+plot(svm_fit, data = cancer_data_test)
+```
+
+Wow! Here, we can visually see how there is only one point that might be a bit unclear for the classifier to differentiate, but
+overall, it is a great improvement. This makes sense since area and measures of size seem to be very indicative of the end classification.
+
+# Conclusion
+Here we see that SVM is our definite winner! The Accuracy is 1, or 100%, and the Sensitivity and Specificity are 1 for our testing set. This makes sense since SVM's tend to do better on smaller data sets. With about 600 observations, our data fits this really well. This showed how further background knowledge about the models, as well as our data can greatly improve and streamline our model selection process! 
+
+The second and third best models, in terms of roc_auc and accuracy, are random forest (Best accuracy: 96.75% Best roc_auc: 0.992) and logistic regression (Best accuracy: ~98.3% Best roc_auc: 0.9935). While logistic regression has a slightly better accuracy, the logistic regression has slightly higher roc_auc. The models are close enough that I would consider them both second choices to our SVM.
+
+Going back to our key insight about the close relation between biological function  and physical structure, it seems that as the number of indentations in the tumor increase, so does the size. The main takeaway from this analysis is that tumors with many concave points and a large radius tend to by malignant. The threshold value for concave points mean seems to be 0.05 for concave points mean. For values greater than that, it is very likely that the tumor is malignant. However, it seems that across tumors with fractal dimensions from roughly 0.05 to 0.1, there isn't a clear pattern of malignant and benign. As a result, I decided to do an SVM plot using the predictors concave points mean and area mean, and we can see we get a more decisive boundary! Overall, this indicates that concave points and area are the most important predictors! The main takeaway from our investigation is that larger tumors are also more irregular in shape, and thus have a higher chance of being malignant instead of benign.
+
+# Additional Resources
+“Active Contour Model.” Wikipedia, Wikimedia Foundation, 3 Aug. 2023, en.wikipedia.org/wiki/Active_contour_model#>:\~:text=Snakes%20in%20particular%20are%20designed,stereo%20matching%20and%20motion%20tracking. 
+
+Stankiewicz, Olgierd. “Stereo Matching.” Stereo Matching - an Overview | ScienceDirect Topics, 2018, www.sciencedirect.com/topics/engineering/stereo-matching#>:\~:text=is%20not%20straightforward.-,Stereo%20matching%20or%20disparity%20estimation%20is%20the%20process%20of%20finding,on%20the%20same%20epipolar%20line. 
+
+Wahyuni, Elvira, Sukma. “Analysis of Feature Extraction and Classification Methods on Histopathological Images for Diagnosing Invasive Ductal Carcinoma.” IEEE Xplore, ieeexplore.ieee.org/document/9923967.
+
+Zheng, Bichen, et al. “Breast Cancer Diagnosis Based on Feature Extraction Using a Hybrid of K-Means and Support Vector Machine Algorithms.” Science Direct, Pergamon, 30 Aug. 2013, www.sciencedirect.com/science/article/abs/pii/S0957417413006659. 
+
